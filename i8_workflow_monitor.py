@@ -57,6 +57,11 @@ CONFIG = load_config()
 LOG_FILE = CONFIG.get("monitor", "log_file", fallback="monitor.log")
 LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), LOG_FILE)
 
+# 确保日志目录存在
+LOG_DIR = os.path.dirname(LOG_PATH)
+if LOG_DIR:
+    os.makedirs(LOG_DIR, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -66,7 +71,7 @@ logging.basicConfig(
     ],
     force=True,
 )
-# 修复 Windows 终端 UTF-8 编码问题
+# 设置 stdout/stderr 编码（兼容 Linux / Windows）
 for stream_name in ("stdout", "stderr"):
     stream = getattr(sys, stream_name, None)
     if stream and hasattr(stream, "reconfigure"):
@@ -799,7 +804,11 @@ def main():
 
     # 命令行参数优先
     if args.once:
-        run_once_and_exit()
+        try:
+            run_once_and_exit()
+        except Exception as e:
+            logger.error(f"运行异常: {e}", exc_info=True)
+            sys.exit(1)
         return
     if args.loop:
         monitor = TaskMonitor()

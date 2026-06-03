@@ -2,9 +2,11 @@ name: Scheduled Task Check
 
 on:
   schedule:
-    # 每隔 30 分钟运行一次检测
     - cron: '*/30 * * * *'
-  workflow_dispatch:      # 支持在 GitHub 页面手动触发
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   check-tasks:
@@ -25,36 +27,65 @@ jobs:
         run: |
           pip install -r requirements.txt -q
           echo "✅ 依赖已安装"
+          python -c "import requests; import websocket; from Crypto.Cipher import AES; print('✅ 所有依赖导入正常')"
 
       - name: Inject config.ini
         run: |
           if [ -n "${{ secrets.CONFIG_INI }}" ]; then
             echo "${{ secrets.CONFIG_INI }}" | base64 -d > config.ini
             chmod 600 config.ini
-            echo "✅ 生产 config.ini 已加载"
+            echo "✅ 配置已注入（$(wc -c < config.ini) 字节）"
           else
             echo "⚠️ 未设置 CONFIG_INI Secret，使用示例配置"
             cp config.ini.example config.ini
           fi
 
+      - name: Debug - verify config
+        run: |
+          echo "📄 项目文件:"
+          ls -la *.py *.ini requirements.txt .github/workflows/*.yml 2>/dev/null
+          echo "---"
+          echo "🔍 config.ini 关键字段检查:"
+          grep -E '^(host|port|username|customer_code|bot_id|mode) ' config.ini || echo "  (配置为空或格式不符)"
+
       - name: Run i8 task check
+        id: run_check
         run: |
           echo "============================================"
           echo "🕐 定时待办检测 ($(date '+%Y-%m-%d %H:%M:%S'))"
-          echo "运行环境: GitHub Actions (${{ runner.os }})"
+          echo "运行环境: GitHub Actions (${{ runner.os }}) Python: $(python --version)"
           echo "============================================"
 
+          # 捕获退出码
           python i8_workflow_monitor.py --once 2>&1
+          exit_code=$?
 
           echo ""
+          if [ $exit_code -eq 0 ]; then
+            echo "✅ 检测成功完成"
+          else
+            echo "❌ 脚本退出码: $exit_code"
+          fi
+
+          # 输出日志（无论成功失败）
+          if [ -f monitor.log ]; then
+            echo ""
+            echo "📄 运行时日志（末30行）:"
+            tail -30 monitor.log
+          else
+            echo "⚠️ monitor.log 未生成"
+          fi
+
           echo "============================================"
-          echo "✅ 检测完成"
-          echo "============================================"
+          exit $exit_code
 
       - name: Upload log artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: monitor-log
-          path: monitor.log
+          path: |
+            monitor.log
+            *.log
           retention-days: 7
+          if-no-files-found: warn
