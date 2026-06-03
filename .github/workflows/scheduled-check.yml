@@ -6,58 +6,55 @@ on:
     - cron: '*/30 * * * *'
   workflow_dispatch:      # 支持在 GitHub 页面手动触发
 
-env:
-  DEPLOY_DIR: /opt/i8-workflow-monitor
-
 jobs:
   check-tasks:
     name: Check Pending Tasks
     runs-on: ubuntu-latest
 
     steps:
-      - name: Run i8 task check on remote server
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          port: ${{ secrets.SSH_PORT || '22' }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            set -e
+          python-version: '3.11'
+          cache: 'pip'
 
-            echo "============================================"
-            echo "🕐 定时待办检测 ($(date '+%Y-%m-%d %H:%M:%S'))"
-            echo "============================================"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt -q
+          echo "✅ 依赖已安装"
 
-            cd ${{ env.DEPLOY_DIR }}
+      - name: Inject config.ini
+        run: |
+          if [ -n "${{ secrets.CONFIG_INI }}" ]; then
+            echo "${{ secrets.CONFIG_INI }}" | base64 -d > config.ini
+            chmod 600 config.ini
+            echo "✅ 生产 config.ini 已加载"
+          else
+            echo "⚠️ 未设置 CONFIG_INI Secret，使用示例配置"
+            cp config.ini.example config.ini
+          fi
 
-            # 检查项目完整性
-            if [ ! -f "i8_workflow_monitor.py" ]; then
-              echo "❌ 项目文件缺失，请先通过 deploy.yml 部署"
-              exit 1
-            fi
+      - name: Run i8 task check
+        run: |
+          echo "============================================"
+          echo "🕐 定时待办检测 ($(date '+%Y-%m-%d %H:%M:%S'))"
+          echo "运行环境: GitHub Actions (${{ runner.os }})"
+          echo "============================================"
 
-            # 确保虚拟环境存在
-            if [ ! -d "venv" ]; then
-              echo "🔧 创建虚拟环境..."
-              python3 -m venv venv
-              ./venv/bin/pip install -r requirements.txt -q
-              echo "✅ 虚拟环境已创建"
-            fi
+          python i8_workflow_monitor.py --once 2>&1
 
-            # 确保配置文件存在
-            if [ ! -f "config.ini" ]; then
-              echo "❌ config.ini 不存在！请通过 GitHub Secrets 配置 CONFIG_INI"
-              exit 1
-            fi
+          echo ""
+          echo "============================================"
+          echo "✅ 检测完成"
+          echo "============================================"
 
-            # 执行一次性检测 (--once 模式，无需交互)
-            echo "📋 开始检测 i8 待办任务..."
-            ./venv/bin/python i8_workflow_monitor.py --once 2>&1
-
-            echo ""
-            echo "============================================"
-            echo "✅ 定时检测完成"
-            echo "📄 最新日志:"
-            tail -5 monitor.log 2>/dev/null || echo "   暂无日志"
-            echo "============================================"
+      - name: Upload log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitor-log
+          path: monitor.log
+          retention-days: 7
