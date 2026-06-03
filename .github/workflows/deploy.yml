@@ -3,7 +3,7 @@ name: Deploy to Linux Server
 on:
   push:
     branches: [main, master]
-  workflow_dispatch:      # 支持手动触发
+  workflow_dispatch:      # 支持在 GitHub 页面手动触发
 
 env:
   DEPLOY_DIR: /opt/i8-workflow-monitor
@@ -24,7 +24,7 @@ jobs:
             echo "${{ secrets.CONFIG_INI }}" | base64 -d > config.ini
             echo "✅ 生产 config.ini 已生成"
           else
-            echo "⚠️ 未设置 CONFIG_INI secret，使用示例配置"
+            echo "⚠️ 未设置 CONFIG_INI secret，将使用 config.ini.example"
             cp config.ini.example config.ini
           fi
 
@@ -35,14 +35,12 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           port: ${{ secrets.SSH_PORT || '22' }}
           key: ${{ secrets.SSH_KEY }}
-          source: |
-            ./
+          source: .
           target: ${{ env.DEPLOY_DIR }}
-          strip_components: 0
           rm: false
           overwrite: true
 
-      - name: Deploy on remote server
+      - name: Deploy on remote server (SSH)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -51,58 +49,52 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             set -e
-            echo "📦 部署 i8-workflow-monitor..."
+            echo "📦 开始部署..."
 
             cd ${{ env.DEPLOY_DIR }}
 
-            # 1. 排除不应覆盖的本地文件
-            rm -f venv/ .monitor_state.json *.log
+            # 1. 清理不应覆盖的本地文件
+            rm -rf venv .monitor_state.json *.log __pycache__
 
             # 2. 修复权限
             chmod +x i8_workflow_monitor.py
             chmod 600 config.ini
 
-            # 3. 检查/创建虚拟环境
-            if [ ! -d "venv" ]; then
-              echo "创建虚拟环境..."
-              python3 -m venv venv
-            fi
+            # 3. 创建/更新虚拟环境
+            python3 -m venv venv
             ./venv/bin/pip install -r requirements.txt -q
-            echo "✅ 依赖已更新"
+            echo "✅ 依赖已安装"
 
-            # 4. 注册/重启 systemd 服务
+            # 4. 注册 systemd 服务（首次自动创建）
             SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-            if [ ! -f "$SERVICE_FILE" ]; then
-              echo "注册 systemd 服务..."
-              sudo tee "$SERVICE_FILE" > /dev/null <<EOF
-        [Unit]
-        Description=i8 Workflow Task Monitor
-        After=network-online.target
-        Wants=network-online.target
+            sudo tee "$SERVICE_FILE" > /dev/null <<SERVICEEOF
+[Unit]
+Description=i8 Workflow Task Monitor
+After=network-online.target
+Wants=network-online.target
 
-        [Service]
-        Type=simple
-        User=root
-        WorkingDirectory=${{ env.DEPLOY_DIR }}
-        ExecStart=${{ env.DEPLOY_DIR }}/venv/bin/python ${{ env.DEPLOY_DIR }}/i8_workflow_monitor.py
-        Restart=always
-        RestartSec=10
-        StandardOutput=append:${{ env.DEPLOY_DIR }}/monitor.log
-        StandardError=append:${{ env.DEPLOY_DIR }}/monitor.log
+[Service]
+Type=simple
+User=root
+WorkingDirectory=${{ env.DEPLOY_DIR }}
+ExecStart=${{ env.DEPLOY_DIR }}/venv/bin/python ${{ env.DEPLOY_DIR }}/i8_workflow_monitor.py
+Restart=always
+RestartSec=10
+StandardOutput=append:${{ env.DEPLOY_DIR }}/monitor.log
+StandardError=append:${{ env.DEPLOY_DIR }}/monitor.log
 
-        [Install]
-        WantedBy=multi-user.target
-EOF
-              sudo systemctl daemon-reload
-              sudo systemctl enable ${SERVICE_NAME}.service
-            fi
-
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
             sudo systemctl daemon-reload
+            sudo systemctl enable ${SERVICE_NAME}.service
             sudo systemctl restart ${SERVICE_NAME}.service
             echo "✅ 服务已重启"
 
-            # 5. 验证
-            sleep 2
-            sudo systemctl status ${SERVICE_NAME}.service --no-pager | head -10
+            # 5. 验证运行状态
+            sleep 3
+            sudo systemctl status ${SERVICE_NAME}.service --no-pager | head -12
             echo ""
-            echo "🎉 部署完成！日志: tail -f ${{ env.DEPLOY_DIR }}/monitor.log"
+            echo "🎉 部署完成！"
+            echo "日志查看: tail -f ${{ env.DEPLOY_DIR }}/monitor.log"
+            echo "系统日志: sudo journalctl -u ${SERVICE_NAME} -f"
