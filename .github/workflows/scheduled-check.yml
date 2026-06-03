@@ -1,8 +1,12 @@
 name: Scheduled Task Check
 
 on:
+  # 定时每 30 分钟（避开整点高峰，选 :15 和 :45）
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '15,45 * * * *'
+  # 每次推送 main 也触发，保证修复后立即可验证
+  push:
+    branches: [main, master]
   workflow_dispatch:
 
 env:
