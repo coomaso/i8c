@@ -783,11 +783,37 @@ def run_once_and_exit():
 
 
 def main():
+    """主入口，支持命令行参数。"""
+    # 解析命令行参数
+    import argparse
+    parser = argparse.ArgumentParser(description="i8 工作流待办监测")
+    parser.add_argument(
+        "--once", "-1", action="store_true",
+        help="一次性检测模式（配合 cron / 计划任务使用）",
+    )
+    parser.add_argument(
+        "--loop", "-2", action="store_true",
+        help="持续循环检测模式",
+    )
+    args, _ = parser.parse_known_args()
+
+    # 命令行参数优先
+    if args.once:
+        run_once_and_exit()
+        return
+    if args.loop:
+        monitor = TaskMonitor()
+        try:
+            monitor.run_loop()
+        except KeyboardInterrupt:
+            print("\n服务已停止。")
+        return
+
+    # 交互式菜单
     print("=" * 60)
     print("  i8 工作流待办任务监测 + 企业微信 Bot 提醒")
     print("=" * 60)
 
-    # 检查配置
     notifier = WeComNotifier()
     if not notifier.is_configured:
         print()
