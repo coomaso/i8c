@@ -737,7 +737,7 @@ class TaskMonitor:
         elif total > 0 and (now - self.last_notify_time) >= self.remind_interval:
             should_notify = True
             reason = f"定时提醒（距上次通知 > {self.remind_interval // 60} 分钟）"
-        elif total == 0 and CONFIG.getboolean("monitor", "notify_on_empty", False) and not self.last_task_ids:
+        elif total == 0 and CONFIG.getboolean("monitor", "notify_on_empty", fallback=False) and not self.last_task_ids:
             should_notify = True
             reason = "首次启动，暂无待办"
 
