@@ -1,0 +1,18 @@
+[Unit]
+Description=i8 Workflow Task Monitor
+Documentation=https://github.com/your-repo/i8-workflow-monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/i8-workflow-monitor
+ExecStart=/opt/i8-workflow-monitor/venv/bin/python /opt/i8-workflow-monitor/i8_workflow_monitor.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/i8-workflow-monitor/monitor.log
+StandardError=append:/opt/i8-workflow-monitor/monitor.log
+
+[Install]
+WantedBy=multi-user.target

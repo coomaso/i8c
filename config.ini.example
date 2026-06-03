@@ -1,0 +1,38 @@
+[i8]
+# i8 系统登录配置（请填入实际值）
+host = your-i8-host.com
+port = 8888
+customer_code = 
+username = 
+password = 
+# 客户号映射的企业代码（自动获取，无需修改）
+enterprise_code = 
+ocode = 
+
+[wecom]
+# 通知模式：webhook | websocket
+#   webhook  : 使用群机器人 Webhook URL（配置 webhook_url）
+#   websocket: 使用智能机器人 WebSocket 长连接（配置 bot_id / secret / target_chatid）
+mode = websocket
+
+# 模式一：Webhook 地址（mode=webhook 时生效）
+webhook_url = 
+
+# 模式二：WebSocket 长连接（mode=websocket 时生效）
+bot_id = 
+secret = 
+# 目标会话 ID：首次在企业微信群 @机器人 后自动获取，或手动填写
+target_chatid = 
+# 会话类型：1=单聊 2=群聊
+chat_type = 2
+
+# 提醒间隔（秒）
+remind_interval = 3600
+
+[monitor]
+# 检测间隔（秒）
+check_interval = 300
+# 首次启动是否发送空任务通知
+notify_on_empty = False
+# 日志文件路径
+log_file = monitor.log
