@@ -654,11 +654,11 @@ class TaskMonitor:
     def _extract_task_ids(data: Dict) -> Set[str]:
         ids = set()
         for rec in data.get("Record", []):
-            tid = rec.get("id_") or rec.get("phid") or rec.get("task_id") or ""
+            tid = rec.get("id_") or rec.get("phid") or rec.get("proc_inst_id_") or ""
             if tid:
                 ids.add(str(tid))
             else:
-                biz = rec.get("proc_inst_id_", "") + rec.get("name_", "")
+                biz = rec.get("proc_inst_id_", "") + rec.get("act_name", "")
                 if biz:
                     ids.add(hashlib.md5(biz.encode()).hexdigest())
         return ids
@@ -683,18 +683,39 @@ class TaskMonitor:
         if records:
             lines.append(f"当前共有 **{total}** 条待办任务：\n")
             for i, rec in enumerate(records[:20], 1):
-                name = rec.get("name_") or rec.get("msg") or "(无标题)"
+                # 节点名称 + 单据名称
+                act_name = rec.get("act_name", "")
+                biz_name = rec.get("bizname") or rec.get("pi_key", "")
+                pd_name = rec.get("pdname", "")
+
+                if biz_name and act_name:
+                    name = f"{biz_name} - {act_name}"
+                elif biz_name:
+                    name = biz_name
+                elif act_name:
+                    name = act_name
+                else:
+                    name = pd_name or "(无标题)"
+
                 parts = [f"{i}. **{name}**"]
-                proc_name = rec.get("proc_def_name_") or rec.get("cd_NAME_") or ""
-                if proc_name:
-                    parts[0] += f" [{proc_name}]"
-                starter = rec.get("start_user_name_") or ""
-                create_time = rec.get("create_time_") or ""
+                if pd_name and pd_name not in name:
+                    parts[0] += f" [{pd_name}]"
+
+                starter = rec.get("pistartusername", "")
+                start_time = rec.get("pistarttime", "")
+                task_time = rec.get("taskstarttime", "")
+                duration = rec.get("duration", "")
+                fooname = rec.get("fooname", "")
+
                 detail_parts = []
                 if starter:
                     detail_parts.append(f"发起人: {starter}")
-                if create_time:
-                    detail_parts.append(f"时间: {create_time}")
+                if start_time:
+                    detail_parts.append(f"发起: {start_time}")
+                if duration:
+                    detail_parts.append(f"耗时: {duration}")
+                if fooname:
+                    lines.append(f"   组织: {fooname}")
                 if detail_parts:
                     parts.append("   " + " | ".join(detail_parts))
                 lines.append("\n".join(parts))
