@@ -781,6 +781,64 @@ class TaskMonitor:
 # 入口
 # ──────────────────────────────────────────────
 
+def run_capture_chatid():
+    """捕获 chatid 模式：持续连接 WebSocket，等待群消息 @机器人。"""
+    import signal
+
+    print("=" * 60)
+    print("  🔍 i8 待办监测 — 捕获 ChatID 模式")
+    print("=" * 60)
+    print()
+    print("此模式将持续运行 5 分钟，等待企业微信群消息。")
+    print()
+    print("请在企业微信群中 @机器人 发送任意消息。")
+    print("程序会自动捕获群聊 ID 并保存到 config.ini。")
+    print()
+    print("按 Ctrl+C 可随时退出。")
+    print()
+
+    client = WeComWSClient()
+    client.start()
+
+    # 等待捕获 chatid
+    deadline = time.time() + 300  # 5 分钟超时
+    captured = False
+    while time.time() < deadline and not captured:
+        if client.target_chatid:
+            captured = True
+            break
+        if client._known_chatids:
+            # 找到第一个群聊 chatid
+            for cid, ct in client._known_chatids.items():
+                if ct == 2:
+                    client.target_chatid = cid
+                    captured = True
+                    break
+        if not captured:
+            time.sleep(1)
+
+    client.stop()
+
+    if captured:
+        print()
+        print("✅  成功捕获群聊 ID！")
+        print(f"    chatid = {client.target_chatid}")
+        print(f"    chat_type = {client.chat_type}")
+        print()
+        print("请执行以下操作：")
+        print(f"1. 解码当前 CONFIG_INI: echo $CONFIG_INI | base64 -d > config.ini")
+        print(f"2. 编辑 config.ini，在 [wecom] 节添加：")
+        print(f"   target_chatid = {client.target_chatid}")
+        print(f"3. 重新编码: base64 config.ini | tr -d '\\n'")
+        print(f"4. 将结果更新到 GitHub Secrets → CONFIG_INI")
+    else:
+        print()
+        print("❌ 超时未捕获到群消息。请确认：")
+        print("   1. 机器人配置正确（bot_id / secret）")
+        print("   2. 在企业微信群中 @了机器人")
+        print("   3. 可以重新运行 python i8_workflow_monitor.py --capture")
+
+
 def run_once_and_exit():
     """执行一次检测后退出（Windows 计划任务模式）。"""
     monitor = TaskMonitor()
@@ -800,6 +858,10 @@ def main():
         "--loop", "-2", action="store_true",
         help="持续循环检测模式",
     )
+    parser.add_argument(
+        "--capture", action="store_true",
+        help="捕获 chatid 模式：连接企微 WebSocket 等待群消息，5分钟内 @机器人 即可自动捕获",
+    )
     args, _ = parser.parse_known_args()
 
     # 命令行参数优先
@@ -816,6 +878,9 @@ def main():
             monitor.run_loop()
         except KeyboardInterrupt:
             print("\n服务已停止。")
+        return
+    if args.capture:
+        run_capture_chatid()
         return
 
     # 交互式菜单

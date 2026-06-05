@@ -60,7 +60,6 @@ jobs:
           echo "运行环境: GitHub Actions (${{ runner.os }}) Python: $(python --version)"
           echo "============================================"
 
-          # 捕获退出码
           python i8_workflow_monitor.py --once 2>&1
           exit_code=$?
 
@@ -71,15 +70,17 @@ jobs:
             echo "❌ 脚本退出码: $exit_code"
           fi
 
-          # 输出日志（无论成功失败）
           if [ -f monitor.log ]; then
             echo ""
             echo "📄 运行时日志（末30行）:"
             tail -30 monitor.log
-          else
-            echo "⚠️ monitor.log 未生成"
           fi
 
+          echo ""
+          echo "📌 通知投递说明:"
+          echo "   ✅ WebSocket 连接+鉴权成功 → 通知已推送"
+          echo "   ⚠️ target_chatid 未配置   → 通知内容见上方日志"
+          echo "   解决: github.com/coomaso/i8c → README → ChatID 捕获"
           echo "============================================"
           exit $exit_code
 
